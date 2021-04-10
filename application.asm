@@ -32,15 +32,15 @@
 		# Length of the current file
 		li $t0, 0		   
 
+		#open a file for writing
+		li $v0, 13        # system call for open file
+		la $a0, filepath
+		li $a1, 0         # Open for reading
+		li $a2, 0
+		syscall            # open a file (file descriptor returned in $v0)
+		move $t3, $v0      # save the file descriptor 	
+		addi $t0, $t0, 1
 		ri_loop:
-			#open a file for writing
-			li $v0, 13        # system call for open file
-			la $a0, filepath
-			li $a1, 0         # Open for reading
-			li $a2, 0
-			syscall            # open a file (file descriptor returned in $v0)
-			move $t3, $v0      # save the file descriptor 	
-			addi $t0, $t0, 1
 
 
 			# Error treatment: is file descriptor negative ? error!
@@ -76,18 +76,20 @@
 			# move $a0, $t1
 			# syscall
 
-			# Close the file 
-			li   $v0, 16       # system call for close file
-			move $a0, $t3      # file descriptor to close
-			syscall            # close file
 			
 			# Check whether it is EOF
 			# If the length of the buffer is greater than the length of the file, it's EOF 
-			bne $t0, $t4, close_file_and_return
+			# bne $t0, $t4, close_file_and_return
+			beq $t4, 0, close_file_and_return
 
 			j ri_loop
 
 			close_file_and_return:
+				# Close the file 
+				li   $v0, 16       # system call for close file
+				move $a0, $t3      # file descriptor to close
+				syscall            # close file
+				
 				lw  $ra, 0($sp)
 				addi $sp, $sp, 4
 
