@@ -2,6 +2,7 @@
         filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/images.pgm"
         num_rows:               .word 1
         num_columns:            .word 1
+        last_char:              .word 0
     .text
 
     main:
@@ -45,7 +46,7 @@
         li $s2, 0          # buffer_address
         li $s3, 0          # file_descriptor
         li $s4, 0          # buffer_address_loaded_as_a_word
-        li $s5, 0          # last_char : 0 - no-a-whitespace, 1 - whitespace
+        lw $s5, last_char  # last_char : 0 - no-a-whitespace, 1 - whitespace
 
         jal open_file
         move $s3, $v0      # file_descriptor
@@ -69,18 +70,32 @@
             li $v0, -1              # return case EOF
             beq $t0, 0, ra_return   # return case EOF
 
-            lw $t0, 0($s2)
-            move $a0, $t0
-            jal is_not_a_number
-            beq $v0, 1, ra_EOF      # if the char just read is a letter, branch
+            lw $s5, last_char           # old_last_char
 
             lw $t0, 0($s2)
             move $a0, $t0
+            jal is_number_or_whitespace
+            beq $v0, 0, ra_EOF      # if the char just read is a letter, branch
+        
+            
+            lw $t0, 0($s2)
+            move $a0, $t0
             jal handle_whitespace_if_any
+            lw $t0, last_char           # new_last_char
+            # li $v0, 1
+            # move $a0, $s5
+            # syscall
+            # li $v0, 1
+            # move $a0, $t0
+            # syscall
+            bne $t0, 1, ra_loop         # if last_char isn't a whitespace, continue
+            beq $s5, $t0, ra_loop       # last_char whitespace repeating! Do not count again
+
+            increasing_values:
             # 0 = not_white_space, 1 = space_or_tab, 2 = bl
-            beq $v0, 0, ra_loop    # continue
+            beq $v0, 0, ra_loop                 # continue
             beq $v0, 2, increase_num_rows       # increase_num_rows
-            bne $s0, 4, ra_loop                 # only increase col if the pointer is in the 4 line
+            bne $s0, 5, ra_loop                 # only increase col if the pointer is in the 4 line
             beq $v0, 1, increase_num_columns    # increase_num_columns
 
             increase_num_columns:
@@ -88,28 +103,25 @@
             j ra_loop
 
             increase_num_rows:
-            lw $t0, num_rows
             addi $s0, $s0, 1
             j ra_loop
 
             ra_EOF:
-            # last_char = 0
-            li $s5, 0   
             # if there's a letter after the 4º line, the program is re-reading the header
             bgt $s0, 4, ra_return 
             # else
             j ra_loop
 
         ra_return:
-        # subi $s0, $s0, 4     # subtracting 4 for the 4 first lines
+        subi $s0, $s0, 5     # subtracting 4 for the 4 first lines and 4 for the first after
 
         sw $s0, num_rows
         sw $s1, num_columns
 
-        move $s2, $a0
+        move $a0, $s2
         jal close_file
 
-        # Printing num_rows and num_columns
+        #Printing num_rows and num_columns
         li $v0, 1
         move $a0, $s0
         syscall
@@ -143,21 +155,20 @@
 		beq $a0, 11, is_space_or_tab    # vertical tab
 		beq $a0, 13, is_bl              # carriage return
 		beq $a0, 32, is_space_or_tab    # space	
-        li $s5, 0    # else last_char = 0
+        li $t0, 0                       # if not whitespace: last_char = 0
+        sw $t0, last_char
         j hwif_exit
         is_space_or_tab:
-        beq $s5, 1, hwif_exit   # if last_char was a whitespace, do not count again!
-        li $s5, 1               # last_char = 1
+        li $t0, 1               # last_char = 1
+        sw $t0, last_char
         li $s0, 1
         j hwif_exit
         is_bl:
         li $s0, 2
-        li $s5, 1               # last_char = 1
+        li $t0, 1               # last_char = 1
+        sw $t0, last_char
         j hwif_exit
         hwif_exit:
-        # move $a0, $s0
-        # li $v0, 1
-        # syscall
         move $v0, $s0
         lw  $s0, 0($sp)
         lw  $ra, 4($sp)
@@ -182,34 +193,42 @@
         addi $sp, $sp, 8
         jr $ra
     
-    is_not_a_number:
+    is_number_or_whitespace:
         # args: $a0 - buffer
-       addi $sp, $sp, -8	# 2 register * 4 bytes = 8 bytes 
+        addi $sp, $sp, -12	# 3 register * 4 bytes = 12 bytes 
         sw  $s0, 0($sp)
-        sw  $ra, 4($sp)
+        sw  $s1, 4($sp)
+        sw  $ra, 8($sp)
 
-        li $s0, 1           # is_not_a_number
+        li $s0, 0           # is_number_or_whitespace
+        move $s1, $a0       # $a0
 
+        # if it's a whitespace, return false
         inan_first_check:
-        li $t0, 48
-        blt $a0, $t0, indeed_not_a_number	# if $a0 < $48 then indeed_not_a_number
+        move $a0, $s1
+        jal handle_whitespace_if_any    
+        bne $v0, 0, indeed_number_or_whitespace                                      
         
+        # if $a0 < 48 then is not a number
         inan_second_check:
+        li $t0, 48
+        blt $s1, $t0, inan_return	
+        
+        # if $a0 > 57 then is not a number
+        inan_third_check:
         li $t0, 57
-        # li $v0, 1
-        # # move $a0, $a0
-        # syscall
-        bgt $a0, $t0, indeed_not_a_number	# if $a0 > $57 then indeed_not_a_number
+        bgt $s1, $t0, inan_return	
 
-        j inan_return
+        # else it is a number
 
-        indeed_not_a_number:
-        li $s0, 0
+        indeed_number_or_whitespace:
+        li $s0, 1
         
         inan_return:
         move $v0, $s0
         lw  $s0, 0($sp)
-        lw  $ra, 4($sp)
-        addi $sp, $sp, 8
+        lw  $s1, 4($sp)
+        lw  $ra, 8($sp)
+        addi $sp, $sp, 12
         jr $ra
         # returns true or false
