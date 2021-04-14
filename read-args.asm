@@ -32,21 +32,19 @@
         # return file_descriptor
 
     read_args:
-        addi $sp, $sp, -28	# 7 register * 4 bytes = 28 bytes 
+        addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
         sw  $s0, 0($sp)    
         sw  $s1, 4($sp)    
         sw  $s2, 8($sp)    
         sw  $s3, 12($sp)    
         sw  $s4, 16($sp)    
-        sw  $s5, 20($sp)    
-        sw  $ra, 24($sp)
+        sw  $ra, 20($sp)
 
         li $s0, 1          # rows_counter
         li $s1, 1          # columns_counter
         li $s2, 0          # buffer_address
         li $s3, 0          # file_descriptor
-        li $s4, 0          # buffer_address_loaded_as_a_word
-        lw $s5, last_char  # last_char : 0 - no-a-whitespace, 1 - whitespace
+        lw $s4, last_char  # last_char : 0 - no-a-whitespace, 1 - whitespace
 
         jal open_file
         move $s3, $v0      # file_descriptor
@@ -70,7 +68,7 @@
             li $v0, -1              # return case EOF
             beq $t0, 0, ra_return   # return case EOF
 
-            lw $s5, last_char           # old_last_char
+            lw $s4, last_char           # old_last_char
 
             lw $t0, 0($s2)
             move $a0, $t0
@@ -82,27 +80,21 @@
             move $a0, $t0
             jal handle_whitespace_if_any
             lw $t0, last_char           # new_last_char
-            # li $v0, 1
-            # move $a0, $s5
-            # syscall
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
             bne $t0, 1, ra_loop         # if last_char isn't a whitespace, continue
-            beq $s5, $t0, ra_loop       # last_char whitespace repeating! Do not count again
+            beq $s4, $t0, ra_loop       # last_char whitespace repeating! Do not count again
 
-            increasing_values:
+            increasing_values_ra:
             # 0 = not_white_space, 1 = space_or_tab, 2 = bl
             beq $v0, 0, ra_loop                 # continue
-            beq $v0, 2, increase_num_rows       # increase_num_rows
+            beq $v0, 2, increase_num_rows_ra    # increase_num_rows_ra
             bne $s0, 5, ra_loop                 # only increase col if the pointer is in the 4 line
-            beq $v0, 1, increase_num_columns    # increase_num_columns
+            beq $v0, 1, increase_num_columns_ra # increase_num_columns_ra
 
-            increase_num_columns:
+            increase_num_columns_ra:
             addi $s1, $s1, 1
             j ra_loop
 
-            increase_num_rows:
+            increase_num_rows_ra:
             addi $s0, $s0, 1
             j ra_loop
 
@@ -122,58 +114,58 @@
         jal close_file
 
         #Printing num_rows and num_columns
-        li $v0, 1
-        move $a0, $s0
-        syscall
-        li $v0, 4
-        la $a0, filepath
-        syscall
-        li $v0, 1
-        move $a0, $s1
-        syscall
+        # li $v0, 1
+        # move $a0, $s0
+        # syscall
+        # li $v0, 4
+        # la $a0, filepath
+        # syscall
+        # li $v0, 1
+        # move $a0, $s1
+        # syscall
 
         lw  $s0, 0($sp)
         lw  $s1, 4($sp)
         lw  $s2, 8($sp)
         lw  $s3, 12($sp)
         lw  $s4, 16($sp)
-        lw  $s5, 20($sp)
-        lw  $ra, 24($sp)
-        addi $sp, $sp, 28
+        lw  $ra, 20($sp)
+        addi $sp, $sp, 24
         jr $ra
 
-        handle_whitespace_if_any:
-        # args: $a0 - char
-        addi $sp, $sp, -8	# 2 register * 4 bytes = 8 bytes 
-        sw  $s0, 0($sp)
-        sw  $ra, 4($sp)
+    handle_whitespace_if_any:
+    # args: $a0 - char
+    addi $sp, $sp, -8	# 2 register * 4 bytes = 8 bytes 
+    sw  $s0, 0($sp)
+    sw  $ra, 4($sp)
 
-        li $s0, 0   # return_value          
-                                        # 0 = not_white_space, 1 = space_or_tab, 2 = bl
-        beq $a0, 9, is_space_or_tab     # horizontal tab
-		beq $a0, 10, is_bl              # line feed
-		beq $a0, 11, is_space_or_tab    # vertical tab
-		beq $a0, 13, is_bl              # carriage return
-		beq $a0, 32, is_space_or_tab    # space	
-        li $t0, 0                       # if not whitespace: last_char = 0
-        sw $t0, last_char
-        j hwif_exit
-        is_space_or_tab:
-        li $t0, 1               # last_char = 1
-        sw $t0, last_char
-        li $s0, 1
-        j hwif_exit
-        is_bl:
-        li $s0, 2
-        li $t0, 1               # last_char = 1
-        sw $t0, last_char
-        j hwif_exit
-        hwif_exit:
-        move $v0, $s0
-        lw  $s0, 0($sp)
-        lw  $ra, 4($sp)
-        addi $sp, $sp, 8
-        jr $ra
+    li $s0, 0   # return_value          
+                                    # 0 = not_white_space, 1 = space_or_tab, 2 = bl
+    beq $a0, 9, is_space_or_tab     # horizontal tab
+    beq $a0, 10, is_bl              # line feed
+    beq $a0, 11, is_space_or_tab    # vertical tab
+    beq $a0, 13, is_bl              # carriage return
+    beq $a0, 32, is_space_or_tab    # space	
+    li $t0, 0                       # if not whitespace: last_char = 0
+    sw $t0, last_char
+    j hwif_exit
+    is_space_or_tab:
+    li $t0, 1               # last_char = 1
+    sw $t0, last_char
+    li $s0, 1
+    j hwif_exit
+    is_bl:
+    li $s0, 2
+    li $t0, 1               # last_char = 1
+    sw $t0, last_char
+    j hwif_exit
+    hwif_exit:
+    move $v0, $s0
+    lw  $s0, 0($sp)
+    lw  $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr $ra
+    # returns 0 = not_white_space, 1 = space_or_tab, 2 = bl
 
     close_file:
         # args: $a0 - file_descriptor
