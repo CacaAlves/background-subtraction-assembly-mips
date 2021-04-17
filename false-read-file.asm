@@ -1,31 +1,33 @@
     .data
         filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/images.pgm"
-        last_char:              .word 0
         num_rows:               .word 7
         num_columns:            .word 24
+        last_char:              .word 0
         num_files:              .word 0
         maximum_valmax_length:  .word 5
         bl:                     .asciiz "\n"
         space:                  .asciiz " " 
         char:                   .asciiz 
-    .text
+
+.text
 
     main:
         jal create_matrix_string
-        move $s0, $v0 
+        move $s0, $v0
 
         move $a0, $s0
-        jal read_file
+        jal read_next_file
+
+        move $a0, $s0
+        li $a1, 5
+        # jal print_matrix_string_ascii
 
         # args: $a0 - buffer, $a1 - num_rows, $a2 - num_columns
         move $a0, $s0
         li $a1, 7
         li $a2, 120 
-        # jal print_matrix_string_int
+        jal print_matrix_string_int
 
-        move $a0, $s0
-        li $a1, 5
-        jal print_matrix_string_ascii
 
         main_exit:
         li $v0, 10
@@ -40,7 +42,7 @@
         la $a0, filepath
         li $a1, 0         # Open for reading
         li $a2, 0
-        syscall            # open a file (file descriptor returned in $v0)
+        syscall           # open a file (file descriptor returned in $v0)
 
         lw  $ra, 0($sp)
         addi $sp, $sp, 4
@@ -50,9 +52,9 @@
         jr $ra
         # return file_descriptor
 
-    read_file:
+    read_next_file:
         # args: $a0 - matrix_string_address
-        addi $sp, $sp, -28	# 8 register * 4 bytes = 32 bytes 
+        addi $sp, $sp, -28	# 9 register * 4 bytes = 36 bytes 
         sw  $s0, 0($sp)    
         sw  $s1, 4($sp)    
         sw  $s2, 8($sp)    
@@ -60,15 +62,17 @@
         sw  $s4, 16($sp)    
         sw  $s5, 20($sp)    
         sw  $s6, 24($sp)    
-        sw  $ra, 28($sp)
+        sw  $s7, 28($sp)    
+        sw  $ra, 32($sp)
 
         li $s0, 1          # rows_counter
         li $s1, 1          # columns_counter
         li $s2, 0          # buffer_address
         li $s3, 0          # file_descriptor
-        lw $s4, last_char  # last_char : 0 - not-a-whitespace, 1 - whitespace
-        move $s5, $a0      # matrix_string_buffer
+        lw $s4, last_char  # last_char : 0 - no-a-whitespace, 1 - whitespace
+        move $s5, $a0      # matrix_string_address
         li $s6, 0          # string_pos
+        # move $s7, $a1    # not_in_use
 
         jal open_file
         move $s3, $v0      # file_descriptor
@@ -77,10 +81,9 @@
         li $v0, 9
         li $a0, 1
         syscall
-        move $s2, $v0   # buffer address
+        move $s2, $v0      # buffer_address
         
         rf_loop:
-
             # read from file
             li $v0, 14    	# system call for read from file
             move $a0, $s3   # file descriptor 
@@ -103,23 +106,32 @@
             lb $t0, 0($s2)
             move $a0, $t0
             jal handle_whitespace_if_any
-            lw $t0, last_char                 # new_last_char
-            bne $t0, 1, increasing_values_rf  # if last_char isn't a whitespace, continue
-            beq $s4, $t0, rf_loop             # last_char whitespace repeating! Do not count again
+            lw $t0, last_char           # new_last_char
+            li $t1, 0
+            # if (last_char == not_whitespace) ignore
+            beq $t0, $t1, increasing_variables_and_writing_read_chars_rf
+            beq $s4, $t0, rf_loop       # last_char whitespace repeating! Do not count again
 
-            lb $t1, 0($s2)                    # last_read_char
-
-            increasing_values_rf:
+            increasing_variables_and_writing_read_chars_rf:
             # 0 = not_white_space, 1 = space_or_tab, 2 = bl
-            beq $v0, 0, write_in_matrix_rf      # write the number just read
+            beq $v0, 0, read_number_rf          # read_number_rf
             beq $v0, 2, increase_num_rows_rf    # increase_num_rows_rf
             beq $v0, 1, increase_num_columns_rf # increase_num_columns_rf
 
-            write_in_matrix_rf:
+            read_number_rf:
             li $t0, 5
             blt $s0, $t0, rf_loop       # if (rows_counter < 5) continue
 
             lb $t1, 0($s2)              # last_read_char
+
+            # printing last_read_char
+            li $v0, 1
+            move $a0, $t1
+            syscall
+
+            li $v0, 4
+            la $a0, space
+            syscall
 
             add $t0, $s5, $s6           # pos = matrix_string_address + string_pos
             lb $t1, ($s2)               # last_read_char
@@ -130,15 +142,13 @@
             j rf_loop
 
             increase_num_columns_rf:
-            # addi $s1, $s1, 1
-            li $t0, 5
-            blt $s0, $t0, rf_loop           # if (rows_count < 5) continue
+            addi $s1, $s1, 1    # columns_counter++
+
             j increase_matrix_address_rf
 
             increase_num_rows_rf:
-            addi $s0, $s0, 1
-            li $t0, 6
-            blt $s0, $t0, rf_loop           # if (rows_count < 6) continue
+            addi $s0, $s0, 1    # rows_counter++
+
             j increase_matrix_address_rf
 
             increase_matrix_address_rf:
@@ -154,7 +164,11 @@
             # else
             j rf_loop
 
-        rf_return:
+        rf_return:        
+        lw $t0, num_files
+        addi $t0, $t0, 1
+        sw $t0, num_files
+
         move $a0, $s2
         jal close_file
 
@@ -165,8 +179,9 @@
         lw  $s4, 16($sp)
         lw  $s5, 20($sp)
         lw  $s6, 24($sp)
-        lw  $ra, 28($sp)
-        addi $sp, $sp, 32
+        lw  $s7, 28($sp)
+        lw  $ra, 32($sp)
+        addi $sp, $sp, 36
         jr $ra
 
     handle_whitespace_if_any:
@@ -340,7 +355,7 @@ create_matrix_string:
     lw $t1, num_columns
 
     mul $s3, $t0, $t1   # matrix_length = num_rows * num_columns * sizeof(string)
-    mul $s3, $s3, 5
+    mul $s3, $s3, $s1
 
     # matrix_string_size = num_rows * num_columns * matrix_string_unit_size
     mul $t2, $t0, $t1   
@@ -348,7 +363,7 @@ create_matrix_string:
 
     # create matrix_string buffer
     li $v0, 9
-    move $a0, $t2         # matrix_string_size 
+    move $a0, $t2        # matrix_string_size 
     syscall 
     move $s0, $v0
 
@@ -481,7 +496,7 @@ print_matrix_string_int:
             la $a0, space
             syscall
 
-            add $s0, $s0, $s4       # matrix_address += sizeof(char)    
+            add $s0, $s0, $s4       # matrix_address += sizeof(int)    
             addi $s3, $s3, 1        # counter++
             j pmsi_loop
 

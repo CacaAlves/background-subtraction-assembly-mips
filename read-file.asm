@@ -25,7 +25,7 @@
 
         move $a0, $s0
         li $a1, 5
-        jal print_matrix_string_ascii
+        # jal print_matrix_string_ascii
 
         main_exit:
         li $v0, 10

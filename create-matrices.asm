@@ -127,7 +127,7 @@ create_matrix_string:
     cm_string_loop:
         beq $s4, $s3, cm_string_exit    # if (counter == matrix_length) break  
 
-        li $t0, 56
+        li $t0, 0
         sb $t0, ($s2)                   # matrix_string[counter] = 0
 
         addi $s2, $s2, 1                # matrix_string++
