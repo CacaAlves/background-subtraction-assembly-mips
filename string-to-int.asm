@@ -13,7 +13,7 @@ main:
 
     # create buffer
     li $v0, 9
-    li $a0, 5       # str length 
+    li $a0, 5       # str length
     syscall
 
     li $t0, 49
@@ -93,7 +93,6 @@ convert_string_to_int:
 
 power:
     # args: $a0 - base, $a1 - exponent
-    # args: $a0 - buffer, $a1 - str length
         addi $sp, $sp, -20	# 5 register * 4 bytes = 20 bytes 
         sw $s0, 0($sp)
         sw $s1, 4($sp)

@@ -1,12 +1,11 @@
     .data
         filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/images.pgm"
-        num_rows:               .word 1
-        num_columns:            .word 1
+        maxval:                 .word -1
         last_char:              .word 0
     .text
 
     main:
-        jal read_args
+        jal read_maxval
 
         main_exit:
         li $v0, 10
@@ -31,116 +30,99 @@
         jr $ra
         # return file_descriptor
 
-    read_args:
-        addi $sp, $sp, -28	# 7 register * 4 bytes = 28 bytes 
+    read_maxval:
+        # max maxval is 65536 - length = 5
+
+        addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
         sw  $s0, 0($sp)    
         sw  $s1, 4($sp)    
         sw  $s2, 8($sp)    
         sw  $s3, 12($sp)    
         sw  $s4, 16($sp)    
-        sw  $s5, 20($sp)    
-        sw  $ra, 24($sp)
+        sw  $ra, 20($sp)
 
         li $s0, 1          # rows_counter
-        li $s1, 1          # columns_counter
-        li $s2, 0          # buffer_address
-        li $s3, 0          # file_descriptor
-        li $s4, 0          # buffer_address_loaded_as_a_word
-        lw $s5, last_char  # last_char : 0 - no-a-whitespace, 1 - whitespace
+        li $s1, 0          # buffer_address
+        li $s2, 0          # file_descriptor
+        li $s3, 0          # maxval_string_address
+        li $s4, 0          # maxval_length_counter
 
+        # create the string
+        li $v0, 9
+        li $a0, 5           # str length 
+        syscall
+        move $s3, $v0       # str address
+        move $s4, $v0       # str address
+        
         jal open_file
-        move $s3, $v0      # file_descriptor
+        move $s2, $v0      # file_descriptor
 
         # create the buffer 
         li $v0, 9
         li $a0, 1
         syscall
-        move $s2, $v0   # buffer address
+        move $s1, $v0   # buffer address
         
-        ra_loop:
+        maxval_loop:
 
             # read from file
             li $v0, 14    	# system call for read from file
-            move $a0, $s3   # file descriptor 
-            move $a1, $s2   # address of buffer to which to read
+            move $a0, $s2   # file descriptor 
+            move $a1, $s1   # address of buffer to which to read
             li $a2, 1       # hardcoded buffer length
             syscall         # read from file
             move $t0, $v0   # how many bytes were read
             
-            li $v0, -1              # return case EOF
-            beq $t0, 0, ra_return   # return case EOF
+            li $v0, -1                  # return case EOF
+            beq $t0, 0, valmax_return   # return case EOF
 
-            lw $s5, last_char           # old_last_char
-
-            lw $t0, 0($s2)
-            move $a0, $t0
-            jal is_number_or_whitespace
-            beq $v0, 0, ra_EOF      # if the char just read is a letter, branch
-        
-            
             lw $t0, 0($s2)
             move $a0, $t0
             jal handle_whitespace_if_any
-            lw $t0, last_char           # new_last_char
-            # li $v0, 1
-            # move $a0, $s5
-            # syscall
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
-            bne $t0, 1, ra_loop         # if last_char isn't a whitespace, continue
-            beq $s5, $t0, ra_loop       # last_char whitespace repeating! Do not count again
 
-            increasing_values:
             # 0 = not_white_space, 1 = space_or_tab, 2 = bl
-            beq $v0, 0, ra_loop                 # continue
-            beq $v0, 2, increase_num_rows       # increase_num_rows
-            bne $s0, 5, ra_loop                 # only increase col if the pointer is in the 4 line
-            beq $v0, 1, increase_num_columns    # increase_num_columns
+            beq $v0, 0, concatenate_sum         # concat maxval
+            beq $v0, 2, increase_num_rows_ra    # increase_num_rows_ra
+            beq $v0, 1, end_maxval_function            
 
-            increase_num_columns:
-            addi $s1, $s1, 1
-            j ra_loop
+            concatenate_sum:
+            # only concatenates if the file pointer is in the 4th line
+            bne $s0, 4, maxval_loop
 
-            increase_num_rows:
+            # args: $a0 - buffer, $a1 - value, $a2 - pos
+            move $a0, $s3
+            jal replace_char_str
+            lb $t0, ($s1)
+
+
+            j maxval_loop
+
+            increase_rows_counter_maxval:
             addi $s0, $s0, 1
-            j ra_loop
+            j maxval_loop
 
-            ra_EOF:
-            # if there's a letter after the 4º line, the program is re-reading the header
-            bgt $s0, 4, ra_return 
+            end_maxval_function:
+            # only ends it the line is 4 line and valmax != -1
+            bne $s0, 4, maxval_loop
+            lw $t0, maxval
+            beq $t0, -1, maxval_loop
+
             # else
-            j ra_loop
+            j valmax_return
 
-        ra_return:
-        subi $s0, $s0, 5     # subtracting 4 for the 4 first lines and 4 for the first after
-
-        sw $s0, num_rows
-        sw $s1, num_columns
-
-        move $a0, $s2
-        jal close_file
-
-        #Printing num_rows and num_columns
-        li $v0, 1
-        move $a0, $s0
-        syscall
-        li $v0, 4
-        la $a0, filepath
-        syscall
-        li $v0, 1
+        valmax_return:
         move $a0, $s1
-        syscall
+        jal close_file
 
         lw  $s0, 0($sp)
         lw  $s1, 4($sp)
         lw  $s2, 8($sp)
         lw  $s3, 12($sp)
         lw  $s4, 16($sp)
-        lw  $s5, 20($sp)
-        lw  $ra, 24($sp)
-        addi $sp, $sp, 28
+        lw  $ra, 20($sp)
+        addi $sp, $sp, 24
         jr $ra
+        # return string buffer
 
         handle_whitespace_if_any:
         # args: $a0 - char
@@ -174,6 +156,7 @@
         lw  $ra, 4($sp)
         addi $sp, $sp, 8
         jr $ra
+        # returns 0 = not_white_space, 1 = space_or_tab, 2 = bl
 
     close_file:
         # args: $a0 - file_descriptor
@@ -232,3 +215,29 @@
         addi $sp, $sp, 12
         jr $ra
         # returns true or false
+    
+    replace_char_str:
+        # args: $a0 - buffer, $a1 - value, $a2 - pos
+        addi $sp, $sp, -12	# 3 register * 4 bytes = 12 bytes 
+        sw  $s0, 0($sp)
+        sw  $s1, 4($sp)
+        sw  $ra, 8($sp)
+
+        move $s0, $a0       # tmp for buffer 
+        li $s1, 0           # counter
+
+        rcs_loop:
+            beq $s1, $a2, rcs_replacement
+            addi $s0, $s0, 1    # tmp++
+            addi $s1, $s1, 1    # counter++
+            j rcs_loop
+
+        rcs_replacement:
+        sb $a1, ($s0)
+
+        rcs_exit:
+        lw  $s0, 0($sp)
+        lw  $s1, 4($sp)
+        lw  $ra, 8($sp)
+        addi $sp, $sp, 12
+        jr $ra
