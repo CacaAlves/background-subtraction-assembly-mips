@@ -2,7 +2,6 @@
     str:        .asciiz "001"
 .text
 
-
 main:
     # la $a0, str
     # la $a1, 3

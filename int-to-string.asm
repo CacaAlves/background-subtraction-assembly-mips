@@ -11,7 +11,7 @@ main:
     # printing the resulting str
     li $v0, 4
     move $a0, $s0
-    syscall
+    # syscall
 
     li $v0, 10
     syscall

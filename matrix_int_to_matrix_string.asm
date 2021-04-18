@@ -1,5 +1,5 @@
 .data
-    num_rows:               .word 1
+    num_rows:               .word 3
     num_columns:            .word 3
     maximum_valmax_length:  .word 5
     bl:                     .asciiz "\n"
@@ -9,26 +9,93 @@
 
 main:
     jal create_matrix_int
+
     move $s0, $v0
+    move $a0, $v0
+    jal matrix_int_to_matrix_string
+    move $s1, $v0
 
     move $a0, $s0
-    # jal print_matrix_int
-
-    jal create_matrix_string
-    move $s1, $v0
+    jal print_matrix_int
 
     move $a0, $s1
     lw $a1, num_rows
     lw $t0, num_columns
-    mul $a2, $t0, 5
-    # jal print_matrix_string_int
+    lw $t1, maximum_valmax_length
+    mul $a2, $t0, $t1
+    jal print_matrix_string_int
 
-    move $a0, $s1
-    li $a1, 5
-    jal print_matrix_string_ascii
 
     li $v0, 10
     syscall
+
+matrix_int_to_matrix_string:
+    # args: $a0 - matrix_int_address
+    addi $sp, $sp, -20	# 5 register * 4 bytes = 20 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $ra, 16($sp)
+
+    move $s0, $a0           # matrix_int_address
+    jal create_matrix_string
+    move $s1, $v0           # matrix_string_address
+    lw $t0, num_rows
+    lw $t1, num_columns
+    mul $s2, $t0, $t1       # matrix_length
+    li $s3, 0               # counter
+
+    mitms_loop:
+        beq $s3, $s2, mitms_exit    # if (counter == matrix_length) break
+        bgt $s3, $s2, mitms_exit    # if (counter > matrix_length) break
+
+        # pos_matrix_int = matrix_int_address + (counter * sizeof(int)) 
+        li $t0, 4
+        mul $t1, $s3, $t0
+        add $t1, $t1, $s0           
+
+        lw $a0, 0($t1)
+        jal get_int_length
+        lw $a0, 0($t1)              # pos_matrix_int
+        move $a1, $v0               # int_length
+        jal convert_int_to_string
+        move $t0, $v0               # converted_string
+
+        # pos_matrix_string = matrix_string_address + (counter * sizeof(string)) 
+        lw $t1, maximum_valmax_length   # sizeof(string)
+        mul $t2, $s3, $t1
+        add $t2, $t2, $s1
+
+        # sw $t0, ($t2)                   # matrix_string[counter] = matrix_int[counter]  
+        lb $t1, 0($t0)
+        sb $t1, 0($t2)
+        lb $t1, 1($t0)
+        sb $t1, 1($t2)
+        lb $t1, 2($t0)
+        sb $t1, 2($t2)
+        lb $t1, 3($t0)
+        sb $t1, 3($t2)
+        lb $t1, 4($t0)
+        sb $t1, 4($t2)
+
+
+        addi $s3, $s3, 1                # counter++
+
+        j mitms_loop
+
+
+    mitms_exit:
+    move $v0, $s1
+
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $ra, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+    # return: $v0 - matrix_int_address
 
 create_matrix_int:
     # args: 
@@ -67,7 +134,7 @@ create_matrix_int:
     cm_int_loop:
         beq $s3, $s2, cm_int_exit       # if (counter == matrix_length) break
 
-        li $t0, 0
+        li $t0, 44
         sw $t0, ($s1)               # matrix_int[counter] = 0
 
         addi $s1, $s1, 4            # matrix_int++
@@ -148,6 +215,7 @@ create_matrix_string:
     jr $ra
     # return: $v0 - matrix_string_address
 
+    move $a0, $s0
 print_matrix_int:
         # args: $a0 - buffer
         addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
@@ -171,9 +239,9 @@ print_matrix_int:
 
             lw $t0, 0($s0)           # matrix_address[counter]
             # print int
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
+            li $v0, 1
+            move $a0, $t0
+            syscall
 
             addi $t0, $s3, 1            # counter_tmp = counter + 1 
             div $t0, $s2               # added 1 to the mod calculate correctly
@@ -341,4 +409,191 @@ print_matrix_string_ascii:
     lw $ra, 20($sp)
     addi $sp, $sp, 24
     jr $ra
+
     # return: 
+
+move $a0, $t1
+get_int_length:
+    # args: $a0 - number
+    addi $sp, $sp, -16	# 4 register * 4 bytes = 16 bytes 
+    sw  $s0, 0($sp)
+    sw  $s1, 4($sp)
+    sw  $s2, 8($sp)
+    sw  $ra, 12($sp)
+
+    move $s0, $a0   # number
+    li $s1, 1       # length
+    li $s2, 10      # cur_decimal_place
+
+    li $t0, -1
+    bgt $s0, $t0, gil_loop      # if (number >= 0) continue
+    mul $s0, $s0, $t0           # else
+
+    gil_loop:
+        blt $s0, $s2, gil_exit  # if (number < cur_decimal_place) break
+        # else
+        addi $s1, $s1, 1        # length++
+        mul $s2, $s2, 10        # cur_decimal_place *= 10
+        j gil_loop
+    
+
+    gil_exit:
+    move $v0, $s1
+
+    lw  $s0, 0($sp)
+    lw  $s1, 4($sp)
+    lw  $s2, 8($sp)
+    lw  $ra, 12($sp)
+    addi $sp, $sp, 16
+    jr $ra
+    # return: $v0 - length
+
+convert_int_to_string:
+        # args: $a0 - value, $a1 - str length
+    addi $sp, $sp, -28	# 7 register * 4 bytes = 28 bytes 
+    sw  $s0, 0($sp)
+    sw  $s1, 4($sp)
+    sw  $s2, 8($sp)
+    sw  $s3, 12($sp)
+    sw  $s4, 16($sp)
+    sw  $s5, 20($sp)
+    sw  $ra, 24($sp)
+
+    move $s0, $a0       # int value
+    move $s4, $a1       # str_length
+
+    # create buffer
+    li $v0, 9
+    move $a0, $s4       # str length 
+    syscall
+
+    move $s1, $v0       # buffer_address
+    move $s2, $v0       # buffer_address_tmp
+    li $s3, 0           # last_digit
+    li $s5, 0           # counter
+
+    li $s4, 0                       # str_length = 0 -> we are going to count
+
+    cits_zero_the_buffer_loop:
+        beq $s5, $s3, cits_loop     # if (counter == str_length) break
+
+        move $a0, $s1
+        li $a1, 0
+        move $a2, $s5
+        jal replace_char_str        # replace(buffer, val, pos) 
+        addi $s5, $s5, 1            # counter++
+
+    j cits_zero_the_buffer_loop
+
+    cits_loop:
+        li $t0, 10
+        div $s0, $t0                # value / 10
+        # taking off the last_digit of the value and using it to the if statement
+        mflo $s0                    # value / 10 result
+        mfhi $s3                    # value % 10
+
+        move $a0, $s2               # buffer_address_tmp
+        addi $t0, $s3, 48           # converting the last_digit to char
+        move $a1, $t0
+        li $a2, 0
+        jal replace_char_str        # replace(buffer, val, pos) 
+
+        addi $s2, $s2, 1            # buffer_address_tmp++
+        addi $s4, $s4, 1            # str_length++
+
+        li $t2, 0                   # 0
+        beq $s0, $t2, cits_exit     # if ((int)(value / 10) == 0) break 
+
+        j cits_loop
+
+    cits_exit:
+    move $a0, $s1
+    move $a1, $s4
+    jal invert_str
+    # move $v0, $v0
+    
+    lw  $s0, 0($sp)
+    lw  $s1, 4($sp)
+    lw  $s2, 8($sp)
+    lw  $s3, 12($sp)
+    lw  $s4, 16($sp)
+    lw  $s5, 20($sp)
+    lw  $ra, 24($sp)
+    addi $sp, $sp, 28
+    jr $ra
+    # return: $v0 - buffer_address
+
+replace_char_str:
+    # args: $a0 - buffer, $a1 - value, $a2 - pos
+    addi $sp, $sp, -12	# 3 register * 4 bytes = 12 bytes 
+    sw  $s0, 0($sp)
+    sw  $s1, 4($sp)
+    sw  $ra, 8($sp)
+
+    move $s0, $a0       # tmp for buffer 
+    li $s1, 0           # counter
+
+    rcs_loop:
+        beq $s1, $a2, rcs_replacement
+        addi $s0, $s0, 1    # tmp++
+        addi $s1, $s1, 1    # counter++
+        j rcs_loop
+
+    rcs_replacement:
+    sb $a1, ($s0)
+
+    rcs_exit:
+    lw  $s0, 0($sp)
+    lw  $s1, 4($sp)
+    lw  $ra, 8($sp)
+    addi $sp, $sp, 12
+    jr $ra
+
+invert_str:
+    # args: $a0 - buffer, $a1 - size
+    addi $sp, $sp, -16	# 4 register * 4 bytes = 16 bytes 
+    sw  $s0, 0($sp)
+    sw  $s1, 4($sp)
+    sw  $s2, 8($sp)
+    sw  $ra, 12($sp)
+
+    move $s0, $a0       # old_buffer_tmp 
+    li $s1, 0           # new_buffer
+    move $s2, $a1       # str_length / new_buffer_pos
+
+    # create buffer
+    li $v0, 9
+    move $a0, $s2       # str_length 
+    syscall
+    move $s1, $v0       # new_buffer
+
+    addi $s2, $s2, -1   # positions in arrays begin in 0, so we sub 1
+
+    is_loop:
+        li $t0, 0
+        blt $s2, $t0, is_exit       # if (new_buffer_pos < 0) break
+
+        move $a0, $s1               # new_buffer_address
+        lb $t0, ($s0)               # old_buffer_tmp
+        move $a1, $t0
+        
+        move $a2, $s2               # new_buffer_pos                   
+        jal replace_char_str        # replace(buffer, val, pos)
+
+        addi $s0, $s0, 1            # old_buffer_tmp++
+        addi $s2, $s2, -1           # new_buffer_pos--
+        j is_loop
+
+
+    is_exit:
+    move $v0, $s1                   # new_buffer
+
+    lw  $s0, 0($sp)
+    lw  $s1, 4($sp)
+    lw  $s2, 8($sp)
+    lw  $ra, 12($sp)
+    addi $sp, $sp, 16
+    jr $ra
+
+    # return: $v0 - new buffer address
+    

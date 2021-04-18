@@ -1,5 +1,5 @@
 .data
-    num_rows:               .word 1
+    num_rows:               .word 4
     num_columns:            .word 3
     maximum_valmax_length:  .word 5
     bl:                     .asciiz "\n"
@@ -8,27 +8,72 @@
 .text
 
 main:
-    jal create_matrix_int
+    jal create_matrix_string 
+
+    move $a0, $v0
+    jal matrix_string_to_matrix_int
     move $s0, $v0
 
     move $a0, $s0
-    # jal print_matrix_int
-
-    jal create_matrix_string
-    move $s1, $v0
-
-    move $a0, $s1
-    lw $a1, num_rows
-    lw $t0, num_columns
-    mul $a2, $t0, 5
-    # jal print_matrix_string_int
-
-    move $a0, $s1
-    li $a1, 5
-    jal print_matrix_string_ascii
+    jal print_matrix_int
 
     li $v0, 10
     syscall
+
+matrix_string_to_matrix_int:
+    # args: $a0 - matrix_string_address
+    addi $sp, $sp, -20	# 5 register * 4 bytes = 20 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $ra, 16($sp)
+
+    move $s0, $a0           # matrix_string_address
+    jal create_matrix_int
+    move $s1, $v0           # matrix_int_address
+    lw $t0, num_rows
+    lw $t1, num_columns
+    mul $s2, $t0, $t1       # matrix_length
+    li $s3, 0               # counter
+
+    mstmi_loop:
+        beq $s3, $s2, mstmi_exit    # if (counter == matrix_length) break
+        bgt $s3, $s2, mstmi_exit    # if (counter > matrix_length) break
+
+        # pos_matrix_string = matrix_string_address + (counter * sizeof(string)) 
+        lw $t0, maximum_valmax_length
+        mul $t1, $s3, $t0
+        add $t1, $t1, $s0           
+
+        move $a0, $t1               # pos_matrix_string
+        lw $a1, maximum_valmax_length
+        jal convert_string_to_int
+        move $t0, $v0               # converted_value
+
+        # pos_matrix_int = matrix_int_address + (counter * sizeof(int)) 
+        li $t1, 4                   # sizeof(int)
+        mul $t2, $s3, $t1
+        add $t2, $t2, $s1
+
+        sw $t0, ($t2)               # matrix_int[counter] = matrix_string[counter]  
+
+        addi $s3, $s3, 1            # counter++
+
+        j mstmi_loop
+
+
+    mstmi_exit:
+    move $v0, $s1
+
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $ra, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+    # return: $v0 - matrix_int_address
 
 create_matrix_int:
     # args: 
@@ -171,9 +216,9 @@ print_matrix_int:
 
             lw $t0, 0($s0)           # matrix_address[counter]
             # print int
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
+            li $v0, 1
+            move $a0, $t0
+            syscall
 
             addi $t0, $s3, 1            # counter_tmp = counter + 1 
             div $t0, $s2               # added 1 to the mod calculate correctly
@@ -342,3 +387,57 @@ print_matrix_string_ascii:
     addi $sp, $sp, 24
     jr $ra
     # return: 
+
+convert_string_to_int:
+    # args: $a0 - buffer, $a1 - str length
+    addi $sp, $sp, -28	# 7 register * 4 bytes = 28 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $s4, 16($sp)
+    sw $s5, 20($sp)
+    sw $ra, 24($sp)
+
+    move $s0, $a0       # buffer_address
+    move $s1, $a1       # buffer_length
+    # move $s2, $a0     # buffer_address_tmp -> not in use
+    li $s3, 1           # decimal_place
+    move $s4, $s1       # buffer_address_pos           
+    addi $s4, $s4, -1   # subtracting 1 because the array first index is 0    
+    li $s5, 0           # int value        
+
+
+    sti_loop:
+        blt $s4, 0, sti_exit # if (buffer_address_pos < 0) break
+
+        add $t0, $s0, $s4    # buffer_address[pos]
+        lb $t1, 0($t0)
+        li $t2, 0
+        beq $t1, $t2, sti_loop_increment  # if (buffer_address[pos] == 0) continue  
+
+        addi $t1, $t1, -48  # converting char to int
+        mul $t1, $t1, $s3   # num = num * decimal_place
+        add $s5, $s5, $t1   # value += num
+
+        mul $s3, $s3, 10    # decimal_place *= 10
+
+        sti_loop_increment:
+        # addi $s2, $s2, 1    # buffer_address_tmp++
+        addi $s4, $s4, -1   # buffer_address_pos--
+
+        j sti_loop
+
+    sti_exit:
+    move $v0, $s5
+    
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $s4, 16($sp)
+    lw $s5, 20($sp)
+    lw $ra, 24($sp)
+    addi $sp, $sp, 28
+    jr $ra
+    # return: $v0 - buffer_address
