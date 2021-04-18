@@ -171,9 +171,9 @@ print_matrix_int:
 
             lw $t0, 0($s0)           # matrix_address[counter]
             # print int
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
+            li $v0, 1
+            move $a0, $t0
+            syscall
 
             addi $t0, $s3, 1            # counter_tmp = counter + 1 
             div $t0, $s2               # added 1 to the mod calculate correctly

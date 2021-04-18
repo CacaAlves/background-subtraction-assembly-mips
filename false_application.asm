@@ -65,7 +65,6 @@
 		sw  $s0, 0($sp)
 		sw  $ra, 4($sp)
 
-        read_args
         # case is EOF, x = -1
         # else return x and y
         la $t0, matrix_size
@@ -104,7 +103,7 @@
 
         # create the buffer 
 		li $v0, 9
-		move $a0, 1
+		li $a0, 1
 		syscall
 		move $s1, $v0   # buffer address
 
@@ -113,7 +112,7 @@
 		    li $v0, 14    	# system call for read from file
 		    move $a0, $s2   # file descriptor 
 		    move $a1, $s1   # address of buffer to which to read
-		    move $a2, 1     # hardcoded buffer length
+		    li $a2, 1     # hardcoded buffer length
 		    syscall         # read from file
 		    move $t0, $v0   # how many bytes were read
 

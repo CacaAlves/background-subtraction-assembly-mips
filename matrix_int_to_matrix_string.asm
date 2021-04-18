@@ -412,7 +412,6 @@ print_matrix_string_ascii:
 
     # return: 
 
-move $a0, $t1
 get_int_length:
     # args: $a0 - number
     addi $sp, $sp, -16	# 4 register * 4 bytes = 16 bytes 

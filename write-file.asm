@@ -74,25 +74,25 @@ write_file:
     jal convert_int_to_string
     move $s5, $v0
 
-    # writing num_rows
+    # writing num_columns
     li $v0, 15
     move $a0, $s0
-    move $a1, $s3
-    move $a2, $s4
+    move $a1, $s5
+    move $a2, $s6
     syscall 
-
+    
     # writing space
     li $v0, 15
     move $a0, $s0
     la $a1, space
     li $a2, 1
     syscall 
-
-    # writing num_columns
+    
+    # writing num_rows
     li $v0, 15
     move $a0, $s0
-    move $a1, $s5
-    move $a2, $s6
+    move $a1, $s3
+    move $a2, $s4
     syscall 
 
     # writing bl
