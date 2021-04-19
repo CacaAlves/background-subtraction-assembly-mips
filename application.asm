@@ -19,8 +19,112 @@ main:
     jal create_matrix_int       # stores the sum of all matrices
     jal create_matrix_string    # serves as a temporary matrix before being converted to int
 
+    
+
     li $v0, 10
     syscall
+
+divide_matrix_by_constant:
+    # args: $a0 - matrix_address
+    addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $s4, 16($sp)
+    sw $ra, 20($sp)
+
+    move $s0, $a0       # matrix_address
+    move $s1, $a1       # division_factor    
+    lw $t0, num_rows
+    lw $t1, num_columns
+    mul $s2, $t0, $t1   # matrix_length
+    li $s3, 0           # counter
+    # li $s4, 0          # m_result_address
+
+    dmbc_loop:
+        beq $s3, $s2, dmbc_end   # if (counter == matrix_length) break
+
+        lw $t0, 0($s0)          # pos
+        div $t1, $t0, $s1       # matrix[counter] / division_factor
+        
+        sw $t1, 0($s0)          # matrix[counter] = matrix[counter] / division_factor
+
+        addi $s0, $s0, 4
+        addi $s3, $s3, 1        # counter++
+
+        j dmbc_loop
+
+    dmbc_end:
+    move $v0, $s4
+
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $s4, 16($sp)
+    lw $ra, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    # return:
+
+sum_two_matrices:
+    # args: $a0 - m0, $a1 - m1
+    addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $s4, 16($sp)
+    sw $ra, 20($sp)
+
+    move $s0, $a0       # m0_address
+    move $s1, $a1       # m1_address
+    lw $t0, num_rows
+    lw $t1, num_columns
+    mul $s2, $t0, $t1   # matrix_length
+    li $s3, 0           # counter
+    li $s4, 0           # m_result_address
+
+    # create matrix_int buffer
+    li $v0, 9
+    move $a0, $s2         # matrix_length 
+    syscall 
+    move $s4, $v0
+
+
+    stm_loop:
+        beq $s3, $s2, stm_end   # if (counter == matrix_length) break
+
+        li $t0, 4               # sizeof(int)
+        mul $t1, $s3, $t0   
+        add $t1, $t1, $s0       # pos0 = m0_address + (counter * sizeof(int))
+        mul $t2, $s3, $t0
+        add $t2, $t2, $s1       # pos1 = m1_address + (counter * sizeof(int))
+        mul $t3, $s3, $t0
+        add $t3, $t3, $s4       # pos_result = m_result_address + (counter * sizeof(int))
+        
+        lw $t4, 0($t1)
+        lw $t5, 0($t2)
+        add $t6, $t4, $t5       # m0[counter] + m1[counter]
+        sw $t6, 0($t3)          # m_result[counter] = m0[counter] + m1[counter]
+
+        addi $s3, $s3, 1        # counter++
+
+        j stm_loop
+
+    stm_end:
+    move $v0, $s4
+
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $s4, 16($sp)
+    lw $ra, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    # return: $v0 - m_result_address 
 
 read_args:
     addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
@@ -557,40 +661,6 @@ read_file:
     lw  $ra, 28($sp)
     addi $sp, $sp, 32
     jr $ra
-
-handle_whitespace_if_any:
-    # args: $a0 - char
-    addi $sp, $sp, -8	# 2 register * 4 bytes = 8 bytes 
-    sw  $s0, 0($sp)
-    sw  $ra, 4($sp)
-
-    li $s0, 0   # return_value          
-                                    # 0 = not_white_space, 1 = space_or_tab, 2 = bl
-    beq $a0, 9, is_space_or_tab     # horizontal tab
-    beq $a0, 10, is_bl              # line feed
-    beq $a0, 11, is_space_or_tab    # vertical tab
-    beq $a0, 13, is_bl              # carriage return
-    beq $a0, 32, is_space_or_tab    # space	
-    li $t0, 0                       # if not whitespace: last_char = 0
-    sw $t0, last_char
-    j hwif_exit
-    is_space_or_tab:
-    li $t0, 1               # last_char = 1
-    sw $t0, last_char
-    li $s0, 1
-    j hwif_exit
-    is_bl:
-    li $s0, 2
-    li $t0, 1               # last_char = 1
-    sw $t0, last_char
-    j hwif_exit
-    hwif_exit:
-    move $v0, $s0
-    lw  $s0, 0($sp)
-    lw  $ra, 4($sp)
-    addi $sp, $sp, 8
-    jr $ra
-    # returns 0 = not_white_space, 1 = space_or_tab, 2 = bl
 
 close_file:
     # args: $a0 - file_descriptor
