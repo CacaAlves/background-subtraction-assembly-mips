@@ -1,5 +1,5 @@
 .data
-    filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/images.pgm"
+    filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/input.pgm"
     last_char:              .word 0
     num_rows:               .word 0
     num_columns:            .word 0
@@ -17,15 +17,55 @@ main:
     jal read_args
 
     jal create_matrix_int       # stores the sum of all matrices
+    move $s0, $v0
     jal create_matrix_string    # serves as a temporary matrix before being converted to int
+    move $s1, $v0
 
-    
+    jal open_file
+    move $s2, $v0               # file_descriptor
+
+    main_loop:
+        move $a0, $s1
+        move $a1, $s2
+        jal read_file
+        move $s3, $v0           # EOF
+        
+        
+        move $a0, $s1
+        jal matrix_string_to_matrix_int
+        move $t0, $v0
+
+        move $a0, $s0
+        move $a1, $t0
+        jal sum_two_matrices
+
+        beq $s3, 1, main_division_and_writing  # if (EOF == true) break
+
+        j main_loop
+
+    main_division_and_writing:
+    move $a0, $s0 
+    lw $a1, num_files 
+    jal divide_matrix_by_constant
+
+
+    move $a0, $s0
+    jal matrix_int_to_matrix_string
+    move $s1, $v0
+
+    move $a0, $s1
+    li $a1, 5
+    jal write_file
+
+    main_exit:
+    move $a0, $s2
+    jal close_file
 
     li $v0, 10
     syscall
 
 divide_matrix_by_constant:
-    # args: $a0 - matrix_address
+    # args: $a0 - matrix_address, $a1 - division_factor
     addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
     sw $s0, 0($sp)
     sw $s1, 4($sp)
@@ -43,14 +83,14 @@ divide_matrix_by_constant:
     # li $s4, 0          # m_result_address
 
     dmbc_loop:
-        beq $s3, $s2, dmbc_end   # if (counter == matrix_length) break
+        beq $s3, $s2, dmbc_end  # if (counter == matrix_length) break
 
         lw $t0, 0($s0)          # pos
         div $t1, $t0, $s1       # matrix[counter] / division_factor
-        
+
         sw $t1, 0($s0)          # matrix[counter] = matrix[counter] / division_factor
 
-        addi $s0, $s0, 4
+        addi $s0, $s0, 4        # matrix_address++
         addi $s3, $s3, 1        # counter++
 
         j dmbc_loop
@@ -101,21 +141,18 @@ sum_two_matrices:
         add $t1, $t1, $s0       # pos0 = m0_address + (counter * sizeof(int))
         mul $t2, $s3, $t0
         add $t2, $t2, $s1       # pos1 = m1_address + (counter * sizeof(int))
-        mul $t3, $s3, $t0
-        add $t3, $t3, $s4       # pos_result = m_result_address + (counter * sizeof(int))
         
         lw $t4, 0($t1)
         lw $t5, 0($t2)
+
         add $t6, $t4, $t5       # m0[counter] + m1[counter]
-        sw $t6, 0($t3)          # m_result[counter] = m0[counter] + m1[counter]
+        sw $t6, 0($t1)          # m0[counter] = m0[counter] + m1[counter]
 
         addi $s3, $s3, 1        # counter++
 
         j stm_loop
 
     stm_end:
-    move $v0, $s4
-
     lw $s0, 0($sp)
     lw $s1, 4($sp)
     lw $s2, 8($sp)
@@ -124,7 +161,7 @@ sum_two_matrices:
     lw $ra, 20($sp)
     addi $sp, $sp, 24
     jr $ra
-    # return: $v0 - m_result_address 
+    # return: 
 
 read_args:
     addi $sp, $sp, -24	# 6 register * 4 bytes = 24 bytes 
@@ -212,7 +249,7 @@ read_args:
     sw $s0, num_rows
     sw $s1, num_columns
 
-    move $a0, $s2
+    move $a0, $s3
     jal close_file
 
     lw  $s0, 0($sp)
@@ -390,12 +427,20 @@ write_file:
 
         add $t0, $s1, $s7       # pos = matrix_address + counter 
 
+        wf_printing_number:
+        # if (read_number == null) ignore
+        lb $t1, 0($t0)
+        li $t2, 0
+        beq $t1, $t2, wf_printing_whitespace    
+
+        # else
         li $v0, 15
         move $a0, $s0
         move $a1, $t0
         li $a2, 1
         syscall 
 
+        wf_printing_whitespace:
         addi $t0, $s7, 1                    # counter_tmp = counter + 1 (to the modulo works)
         lw $t1, num_columns
         lw $t2, maximum_valmax_length
@@ -535,16 +580,15 @@ open_file:
         li $a2, 0
         syscall            # open a file (file descriptor returned in $v0)
 
+        # move $v0, $v0
         lw  $ra, 0($sp)
         addi $sp, $sp, 4
-
-        # move $v0, $v0
 
         jr $ra
         # return file_descriptor
 
 read_file:
-    # args: $a0 - matrix_string_address
+    # args: $a0 - matrix_string_address, $a1 - file_descriptor
     addi $sp, $sp, -28	# 8 register * 4 bytes = 32 bytes 
     sw  $s0, 0($sp)    
     sw  $s1, 4($sp)    
@@ -558,13 +602,10 @@ read_file:
     li $s0, 1          # rows_counter
     li $s1, 1          # columns_counter
     li $s2, 0          # buffer_address
-    li $s3, 0          # file_descriptor
+    move $s3, $a1      # file_descriptor
     lw $s4, last_char  # last_char : 0 - not-a-whitespace, 1 - whitespace
     move $s5, $a0      # matrix_string_buffer
     li $s6, 0          # string_pos
-
-    jal open_file
-    move $s3, $v0      # file_descriptor
 
     # create the buffer 
     li $v0, 9
@@ -573,7 +614,6 @@ read_file:
     move $s2, $v0   # buffer address
     
     rf_loop:
-
         # read from file
         li $v0, 14    	# system call for read from file
         move $a0, $s3   # file descriptor 
@@ -582,7 +622,7 @@ read_file:
         syscall         # read from file
         move $t0, $v0   # how many bytes were read
         
-        li $v0, -1              # return case EOF
+        li $v0, 1               # EOF = true
         beq $t0, 0, rf_return   # return case EOF
 
         lw $s4, last_char       # old_last_char
@@ -591,8 +631,7 @@ read_file:
         move $a0, $t0
         jal is_number_or_whitespace
         beq $v0, 0, rf_EOF      # if the char just read is a letter, branch
-    
-        
+
         lb $t0, 0($s2)
         move $a0, $t0
         jal handle_whitespace_if_any
@@ -643,13 +682,15 @@ read_file:
 
         rf_EOF:
         # if there's a letter after the 4º line, the program is re-reading the header
+        li $v0, 0         # EOF = false
         bgt $s0, 4, rf_return 
         # else
         j rf_loop
 
     rf_return:
-    move $a0, $s2
-    jal close_file
+    lw $t0, num_files
+    addi $t0, $t0, 1
+    sw $t0, num_files
 
     lw  $s0, 0($sp)
     lw  $s1, 4($sp)
@@ -661,6 +702,7 @@ read_file:
     lw  $ra, 28($sp)
     addi $sp, $sp, 32
     jr $ra
+    # return: $v0 - EOF
 
 close_file:
     # args: $a0 - file_descriptor
@@ -862,9 +904,9 @@ print_matrix_int:
 
             lw $t0, 0($s0)           # matrix_address[counter]
             # print int
-            # li $v0, 1
-            # move $a0, $t0
-            # syscall
+            li $v0, 1
+            move $a0, $t0
+            syscall
 
             addi $t0, $s3, 1            # counter_tmp = counter + 1 
             div $t0, $s2               # added 1 to the mod calculate correctly
@@ -1304,4 +1346,3 @@ matrix_string_to_matrix_int:
     addi $sp, $sp, 20
     jr $ra
     # return: $v0 - matrix_int_address
-

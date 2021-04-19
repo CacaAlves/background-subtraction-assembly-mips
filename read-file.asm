@@ -10,21 +10,6 @@
     char:                   .asciiz 
 .text
 
-##
-##
-##
-##
-##
-##
-##      TO READ ALL FILES, JUST MAKE A LOOP (read_file returns EOF)
-##      AND OPEN THE FILE BEFORE THE LOOP AND CLOSE ONLY LATER
-##
-##
-##
-##
-##
-##
-
 main:
     jal create_matrix_string
     move $s0, $v0 
