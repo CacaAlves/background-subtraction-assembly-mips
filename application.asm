@@ -1,20 +1,22 @@
 .data
-    filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/input.pgm"
+    filepath:			    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/images/input.pgm"
     last_char:              .word 0
     num_rows:               .word 0
     num_columns:            .word 0
     num_files:              .word 0
+    valmax:                 .word 1
     maximum_valmax_length:  .word 5
     bl:                     .asciiz "\n"
     space:                  .asciiz " " 
     char:                   .asciiz 
     filepath_output:	    .asciiz "/home/gohan/workspaces/assembly-workspace/foreground-detection-calculation/output.pgm"
     output_header:          .asciiz "P2\n# output.pgm\n"
-    fourth_line:            .asciiz "65535\n"
+    fourth_line:            .word 0
+    fourth_line_length:     .word 0
 .text
 
 main:
-    jal read_args
+    jal read_args               # read the header of the pgm file
 
     jal create_matrix_int       # stores the sum of all matrices
     move $s0, $v0
@@ -27,17 +29,16 @@ main:
     main_loop:
         move $a0, $s1
         move $a1, $s2
-        jal read_file
+        jal read_file           # read one file per loop
         move $s3, $v0           # EOF
         
-        
         move $a0, $s1
-        jal matrix_string_to_matrix_int
+        jal matrix_string_to_matrix_int # converting a char matrix to integer matrix
         move $t0, $v0
 
         move $a0, $s0
         move $a1, $t0
-        jal sum_two_matrices
+        jal sum_two_matrices            # summinng matrices 
 
         beq $s3, 1, main_division_and_writing  # if (EOF == true) break
 
@@ -46,16 +47,16 @@ main:
     main_division_and_writing:
     move $a0, $s0 
     lw $a1, num_files 
-    jal divide_matrix_by_constant
+    jal divide_matrix_by_constant       # dividing all matrices by the number of files
 
 
     move $a0, $s0
-    jal matrix_int_to_matrix_string
+    jal matrix_int_to_matrix_string     # converting a integer matrix to a char matrices
     move $s1, $v0
 
     move $a0, $s1
     li $a1, 5
-    jal write_file
+    jal write_file                      # writing output
 
     main_exit:
     move $a0, $s2
@@ -80,7 +81,7 @@ divide_matrix_by_constant:
     lw $t1, num_columns
     mul $s2, $t0, $t1   # matrix_length
     li $s3, 0           # counter
-    # li $s4, 0          # m_result_address
+    # li $s4, 0         # m_result_address
 
     dmbc_loop:
         beq $s3, $s2, dmbc_end  # if (counter == matrix_length) break
@@ -132,7 +133,6 @@ sum_two_matrices:
     syscall 
     move $s4, $v0
 
-
     stm_loop:
         beq $s3, $s2, stm_end   # if (counter == matrix_length) break
 
@@ -147,6 +147,10 @@ sum_two_matrices:
 
         add $t6, $t4, $t5       # m0[counter] + m1[counter]
         sw $t6, 0($t1)          # m0[counter] = m0[counter] + m1[counter]
+
+        # updating (maybe) the valmax
+        move $a0, $t5
+        jal update_max_val
 
         addi $s3, $s3, 1        # counter++
 
@@ -295,6 +299,44 @@ handle_whitespace_if_any:
     jr $ra
     # returns 0 = not_white_space, 1 = space_or_tab, 2 = bl
 
+update_max_val:
+    # args: $a0 - val
+    addi $sp, $sp, -20	# 5 register * 4 bytes = 20 bytes 
+    sw $s0, 0($sp)
+    sw $s1, 4($sp)
+    sw $s2, 8($sp)
+    sw $s3, 12($sp)
+    sw $ra, 16($sp)
+
+    lw $s0, valmax
+    move $s1, $a0
+
+    blt $s1, $s0, umv_exit      # if (input < valmax) ignore
+
+    increase_valmax_umv:
+    sw $s1, valmax
+
+    move $a0, $s1
+    jal get_int_length
+    move $s2, $v0
+    sw $s2, fourth_line_length
+
+    move $a0, $s1
+    move $a1, $s2
+    jal convert_int_to_string
+    move $s0, $v0
+    sw $s0, fourth_line
+
+    umv_exit:
+    lw $s0, 0($sp)
+    lw $s1, 4($sp)
+    lw $s2, 8($sp)
+    lw $s3, 12($sp)
+    lw $ra, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+    # return:
+
 get_int_length:
     # args: $a0 - number
     addi $sp, $sp, -16	# 4 register * 4 bytes = 16 bytes 
@@ -367,7 +409,6 @@ write_file:
     syscall
 
     # printing third and fourth lines
-
     lw $a0, num_rows 
     jal get_int_length
     move $s4, $v0
@@ -415,10 +456,16 @@ write_file:
     # writing fourth_line
     li $v0, 15
     move $a0, $s0
-    la $a1, fourth_line
-    li $a2, 6
+    lw $a1, fourth_line
+    lw $a2, fourth_line_length
     syscall 
 
+    # writing bl
+    li $v0, 15
+    move $a0, $s0
+    la $a1, bl
+    li $a2, 1
+    syscall 
 
     li $s7, 0       # counter
     # writing rest of the file
